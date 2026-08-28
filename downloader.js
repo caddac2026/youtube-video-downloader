@@ -1,4 +1,6 @@
-// State management
+// Complete YouTube Downloader with Backend Integration
+// This version works with a Node.js/Express backend using yt-dlp
+
 let currentVideoData = null;
 let selectedQuality = 'best';
 let selectedFormat = 'mp4';
@@ -33,6 +35,30 @@ function showError(message) {
     }, 5000);
 }
 
+// Show success notification
+function showNotification(message) {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        color: white;
+        padding: 15px 25px;
+        border-radius: 8px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        z-index: 1000;
+        animation: slideInRight 0.3s ease-out;
+        font-weight: bold;
+    `;
+    notification.textContent = '✓ ' + message;
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+        notification.remove();
+    }, 3000);
+}
+
 // Fetch video information
 async function fetchVideoInfo() {
     const url = document.getElementById('youtubeUrl').value.trim();
@@ -60,19 +86,31 @@ async function fetchVideoInfo() {
     spinner.style.display = 'inline-block';
 
     try {
-        // Using YouTube Data API alternative (yt-dlp style approach)
-        // For a real implementation, you would need a backend service
-        currentVideoData = await getVideoInfo(videoId);
+        // Try to fetch from backend first
+        try {
+            const response = await fetch('http://localhost:3000/api/video-info', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url })
+            });
 
-        // Display video info
-        document.getElementById('videoThumbnail').src = currentVideoData.thumbnail;
-        document.getElementById('videoTitle').textContent = currentVideoData.title;
-        document.getElementById('videoChannel').textContent = `Channel: ${currentVideoData.channel}`;
-        document.getElementById('videoDuration').textContent = `Duration: ${currentVideoData.duration}`;
-        document.getElementById('videoViews').textContent = `Views: ${currentVideoData.views}`;
-        document.getElementById('videoUploadDate').textContent = `Uploaded: ${currentVideoData.uploadDate}`;
+            if (response.ok) {
+                const data = await response.json();
+                currentVideoData = data;
+                displayVideoInfo(data);
+                document.getElementById('videoInfoSection').style.display = 'block';
+                return;
+            }
+        } catch (backendError) {
+            console.log('Backend not available, using mock data');
+        }
 
+        // Fallback to mock data if backend is not available
+        currentVideoData = await getMockVideoInfo(videoId);
+        displayVideoInfo(currentVideoData);
         document.getElementById('videoInfoSection').style.display = 'block';
+        showNotification('Using mock data (backend not running)');
+
     } catch (error) {
         showError(`Error fetching video: ${error.message}`);
     } finally {
@@ -81,14 +119,23 @@ async function fetchVideoInfo() {
     }
 }
 
-// Mock function to get video info (in real scenario, this would call a backend)
-async function getVideoInfo(videoId) {
-    return new Promise((resolve, reject) => {
+// Display video information
+function displayVideoInfo(data) {
+    document.getElementById('videoThumbnail').src = data.thumbnail;
+    document.getElementById('videoTitle').textContent = data.title;
+    document.getElementById('videoChannel').textContent = `Channel: ${data.channel}`;
+    document.getElementById('videoDuration').textContent = `Duration: ${data.duration}`;
+    document.getElementById('videoViews').textContent = `Views: ${data.views}`;
+    document.getElementById('videoUploadDate').textContent = `Uploaded: ${data.uploadDate}`;
+}
+
+// Mock function to get video info
+async function getMockVideoInfo(videoId) {
+    return new Promise((resolve) => {
         setTimeout(() => {
-            // Simulated video data - in production, this would come from a backend API
             resolve({
                 id: videoId,
-                title: 'Sample Video Title',
+                title: 'Sample YouTube Video',
                 channel: 'Sample Channel',
                 duration: '10:45',
                 views: '1.2M',
@@ -102,15 +149,13 @@ async function getVideoInfo(videoId) {
                     { quality: 'audio', format: 'mp3' }
                 ]
             });
-        }, 1500);
+        }, 1000);
     });
 }
 
 // Select quality
 function selectQuality(quality) {
     selectedQuality = quality;
-
-    // Update button states
     document.querySelectorAll('.quality-btn').forEach(btn => {
         btn.classList.remove('selected');
     });
@@ -129,6 +174,7 @@ async function downloadVideo() {
         return;
     }
 
+    const url = document.getElementById('youtubeUrl').value.trim();
     const downloadBtn = document.getElementById('downloadBtn');
     const spinner = document.getElementById('downloadSpinner');
     const progressSection = document.getElementById('progressSection');
@@ -142,40 +188,50 @@ async function downloadVideo() {
     statusMessage.textContent = 'Starting download...';
 
     try {
-        // Simulate download progress
-        for (let i = 0; i <= 100; i += Math.random() * 15) {
-            progressFill.style.width = Math.min(i, 100) + '%';
-            progressText.textContent = Math.min(Math.floor(i), 100) + '%';
+        // Try backend first
+        try {
+            const response = await fetch('http://localhost:3000/api/download', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    url: url,
+                    quality: selectedQuality,
+                    format: selectedFormat
+                })
+            });
 
-            if (Math.min(i, 100) < 30) {
-                statusMessage.textContent = 'Fetching video information...';
-            } else if (Math.min(i, 100) < 60) {
-                statusMessage.textContent = 'Processing video...';
-            } else if (Math.min(i, 100) < 90) {
-                statusMessage.textContent = 'Converting format...';
-            } else {
-                statusMessage.textContent = 'Finalizing download...';
+            if (response.ok) {
+                const blob = await response.blob();
+                const filename = `${currentVideoData.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${selectedFormat}`;
+                
+                // Create download link
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(link.href);
+
+                progressFill.style.width = '100%';
+                progressText.textContent = '100%';
+                statusMessage.textContent = '✓ Download complete!';
+                showNotification(`Successfully downloaded: ${currentVideoData.title}`);
+
+                setTimeout(() => {
+                    progressSection.style.display = 'none';
+                    progressFill.style.width = '0%';
+                    progressText.textContent = '0%';
+                    statusMessage.textContent = '';
+                }, 2000);
+                return;
             }
-
-            await new Promise(resolve => setTimeout(resolve, 300));
+        } catch (backendError) {
+            console.log('Backend error, using simulation:', backendError);
         }
 
-        // Complete the download
-        progressFill.style.width = '100%';
-        progressText.textContent = '100%';
-        statusMessage.textContent = 'Download complete! Your file is ready.';
-
-        // Simulate file download
-        const filename = `${currentVideoData.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${selectedFormat === 'mp3' ? 'mp3' : selectedFormat}`;
-        simulateDownload(filename, currentVideoData.title);
-
-        // Reset after delay
-        setTimeout(() => {
-            progressSection.style.display = 'none';
-            progressFill.style.width = '0%';
-            progressText.textContent = '0%';
-            statusMessage.textContent = '';
-        }, 2000);
+        // Fallback to simulation
+        simulateDownload();
 
     } catch (error) {
         showError(`Download failed: ${error.message}`);
@@ -186,44 +242,55 @@ async function downloadVideo() {
     }
 }
 
-// Simulate file download
-function simulateDownload(filename, title) {
-    // Create a blob and trigger download
-    const link = document.createElement('a');
-    link.href = 'data:application/octet-stream;base64,UEsDBBQAAAAIAA=='; // Dummy data
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+// Simulate download progress
+async function simulateDownload() {
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+    const statusMessage = document.getElementById('statusMessage');
 
-    // Show success notification
-    showNotification(`Downloading: ${title}`);
-}
+    for (let i = 0; i <= 100; i += Math.random() * 15) {
+        const progress = Math.min(i, 100);
+        progressFill.style.width = progress + '%';
+        progressText.textContent = Math.floor(progress) + '%';
 
-// Show notification
-function showNotification(message) {
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-        color: white;
-        padding: 15px 25px;
-        border-radius: 8px;
-        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-        z-index: 1000;
-        animation: slideInRight 0.3s ease-out;
-    `;
-    notification.textContent = '✓ ' + message;
-    document.body.appendChild(notification);
+        if (progress < 30) {
+            statusMessage.textContent = 'Fetching video information...';
+        } else if (progress < 60) {
+            statusMessage.textContent = 'Downloading video...';
+        } else if (progress < 90) {
+            statusMessage.textContent = 'Converting format...';
+        } else {
+            statusMessage.textContent = 'Finalizing...';
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    progressText.textContent = '100%';
+    statusMessage.textContent = '✓ Download simulation complete (Backend not running)';
+    showNotification('Install backend to enable real downloads');
 
     setTimeout(() => {
-        notification.remove();
-    }, 3000);
+        document.getElementById('progressSection').style.display = 'none';
+        progressFill.style.width = '0%';
+        progressText.textContent = '0%';
+        statusMessage.textContent = '';
+    }, 2000);
 }
 
-// Add CSS animation for notification
+// Allow Enter key to fetch video
+document.addEventListener('DOMContentLoaded', () => {
+    const urlInput = document.getElementById('youtubeUrl');
+    if (urlInput) {
+        urlInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                fetchVideoInfo();
+            }
+        });
+    }
+});
+
+// Add animation styles
 const style = document.createElement('style');
 style.textContent = `
     @keyframes slideInRight {
@@ -239,67 +306,8 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-// Allow Enter key to fetch video
-document.addEventListener('DOMContentLoaded', () => {
-    const urlInput = document.getElementById('youtubeUrl');
-    if (urlInput) {
-        urlInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                fetchVideoInfo();
-            }
-        });
-    }
-});
-
-// Backend Integration Instructions (for production use)
-/*
-IMPORTANT: This is a client-side implementation that simulates downloads.
-For a production YouTube downloader, you'll need a backend service.
-
-Recommended approaches:
-
-1. Using yt-dlp API (Node.js Backend):
-   - Install: npm install yt-dlp-core
-   - Create endpoint: POST /api/download
-   - Return stream or file URL
-
-2. Using Python Flask Backend:
-   - Install: pip install yt-dlp flask
-   - Create Flask routes for video info and download
-   - Return file as response
-
-3. Using Third-party API:
-   - RapidAPI YouTube Downloader
-   - YouTube Data API (for info only, not downloads)
-
-Backend example (Node.js with Express):
-```javascript
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
-const { exec } = require('child_process');
-
-app.post('/api/download', (req, res) => {
-    const { url, quality, format } = req.body;
-    
-    const outputTemplate = path.join(__dirname, 'downloads', '%(title)s.%(ext)s');
-    const qualityArg = quality === 'best' ? 'best' : `bestvideo[height<=${quality}]/best`;
-    const formatArg = format === 'mp3' ? 'bestaudio/best' : 'best';
-    
-    const command = `yt-dlp -f "${formatArg}" -o "${outputTemplate}" "${url}"`;
-    
-    exec(command, (error, stdout, stderr) => {
-        if (error) {
-            return res.status(500).json({ error: error.message });
-        }
-        res.json({ success: true, file: stdout });
-    });
-});
-```
-
-Legal Notice:
-- Respect copyright laws
-- Only download content you have permission to
-- YouTube ToS may restrict downloads
-- Always respect creators' rights
-*/
+console.log('YouTube Downloader Ready');
+console.log('To enable real downloads, start the backend server:');
+console.log('1. npm install yt-dlp express cors');
+console.log('2. node server.js');
+console.log('Server will run on http://localhost:3000');
