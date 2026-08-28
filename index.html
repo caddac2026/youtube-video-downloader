@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Video Downloader</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📥 YouTube Video Downloader</h1>
+            <p class="subtitle">Download videos directly from YouTube</p>
+        </header>
+
+        <main>
+            <!-- URL Input Section -->
+            <div class="input-section">
+                <div class="input-group">
+                    <input 
+                        type="text" 
+                        id="youtubeUrl" 
+                        class="url-input" 
+                        placeholder="Paste YouTube URL here (e.g., https://www.youtube.com/watch?v=...)"
+                    >
+                    <button class="btn btn-primary" onclick="fetchVideoInfo()">
+                        <span class="btn-text">Fetch Info</span>
+                        <span class="spinner" id="fetchSpinner" style="display: none;"></span>
+                    </button>
+                </div>
+                <div class="error-message" id="errorMessage" style="display: none;"></div>
+            </div>
+
+            <!-- Video Info Section -->
+            <div class="video-info-section" id="videoInfoSection" style="display: none;">
+                <div class="video-preview">
+                    <img id="videoThumbnail" src="" alt="Video thumbnail">
+                    <div class="video-details">
+                        <h2 id="videoTitle">Video Title</h2>
+                        <p id="videoChannel">Channel</p>
+                        <p id="videoDuration">Duration: </p>
+                        <p id="videoViews">Views: </p>
+                        <p id="videoUploadDate">Uploaded: </p>
+                    </div>
+                </div>
+
+                <!-- Download Options -->
+                <div class="download-options">
+                    <div class="option-group">
+                        <h3>Select Quality</h3>
+                        <div class="quality-buttons" id="qualityButtons">
+                            <button class="quality-btn" data-quality="best" onclick="selectQuality('best')">
+                                Best Available
+                            </button>
+                            <button class="quality-btn" data-quality="720p" onclick="selectQuality('720p')">
+                                720p
+                            </button>
+                            <button class="quality-btn" data-quality="480p" onclick="selectQuality('480p')">
+                                480p
+                            </button>
+                            <button class="quality-btn" data-quality="360p" onclick="selectQuality('360p')">
+                                360p
+                            </button>
+                            <button class="quality-btn" data-quality="audio" onclick="selectQuality('audio')">
+                                🎵 Audio Only (MP3)
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="option-group">
+                        <h3>Format</h3>
+                        <div class="format-options">
+                            <label class="radio-option">
+                                <input type="radio" name="format" value="mp4" checked onchange="updateFormat('mp4')">
+                                <span>MP4 (Video)</span>
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="format" value="webm" onchange="updateFormat('webm')">
+                                <span>WebM (Video)</span>
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="format" value="mp3" onchange="updateFormat('mp3')">
+                                <span>MP3 (Audio)</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Download Progress -->
+                <div class="progress-section" id="progressSection" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-text" id="progressText">0%</div>
+                    <div class="status-message" id="statusMessage"></div>
+                </div>
+
+                <!-- Download Button -->
+                <button class="btn btn-success" id="downloadBtn" onclick="downloadVideo()">
+                    <span class="btn-text">📥 Download</span>
+                    <span class="spinner" id="downloadSpinner" style="display: none;"></span>
+                </button>
+            </div>
+
+            <!-- Features Section -->
+            <div class="features-section">
+                <h3>Features</h3>
+                <ul class="features-list">
+                    <li>✅ Download videos in multiple qualities (up to 1080p)</li>
+                    <li>✅ Extract audio as MP3</li>
+                    <li>✅ Fast and efficient downloading</li>
+                    <li>✅ Real-time progress tracking</li>
+                    <li>✅ Support for playlists</li>
+                    <li>✅ No sign-up required</li>
+                </ul>
+            </div>
+
+            <!-- FAQ Section -->
+            <div class="faq-section">
+                <h3>FAQ</h3>
+                <div class="faq-item">
+                    <h4>How do I use this?</h4>
+                    <p>Simply paste a YouTube video URL, select your preferred quality and format, then click Download.</p>
+                </div>
+                <div class="faq-item">
+                    <h4>What formats are supported?</h4>
+                    <p>We support MP4, WebM for video, and MP3 for audio extraction.</p>
+                </div>
+                <div class="faq-item">
+                    <h4>Is this legal?</h4>
+                    <p>Always respect copyright laws. Only download content you have permission to download.</p>
+                </div>
+                <div class="faq-item">
+                    <h4>What's the maximum quality?</h4>
+                    <p>The maximum quality depends on what's available for the video. Usually up to 1080p or 4K.</p>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2026 YouTube Video Downloader | Download videos safely and easily</p>
+        </footer>
+    </div>
+
+    <script src="downloader.js"></script>
+</body>
+</html>
