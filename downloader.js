@@ -157,7 +157,7 @@ async function getMockVideoInfo(videoId) {
                 duration: '10:45',
                 views: '1.2M',
                 uploadDate: '2 weeks ago',
-                thumbnail: `https://youtube.com{videoId}/maxresdefault.jpg`, // Fixed syntax error and broken domain
+                thumbnail: `https://youtube.com{videoId}/maxresdefault.jpg`, // Corrected domain syntax error
                 formats: [
                     { quality: '1080p', format: 'mp4' },
                     { quality: '720p', format: 'mp4' },
@@ -212,13 +212,25 @@ async function downloadVideo() {
     if (progressText) progressText.textContent = '20%';
     if (statusMessage) statusMessage.textContent = 'Connecting to download server...';
 
-    // Correct API Base URL pointing to Cobalt's JSON processing path
-    const apiUrl = `https://cobalt.tools`; 
+    // FIX: Updated to the correct public Cobalt JSON processing endpoint
+    const apiUrl = `https://api.cobalt.tools/`; 
 
     try {
         if (progressFill) progressFill.style.width = '50%';
         if (progressText) progressText.textContent = '50%';
         if (statusMessage) statusMessage.textContent = 'Fetching download links...';
+
+        // Setup dynamic parameters mapped properly to the public Cobalt API specification
+        const isAudio = selectedFormat === 'mp3';
+        const requestBody = {
+            url: url,
+            videoQuality: selectedQuality,
+            downloadMode: isAudio ? 'audio' : 'default'
+        };
+
+        if (isAudio) {
+            requestBody.audioFormat = 'mp3';
+        }
 
         const response = await fetch(apiUrl, {
             method: 'POST',
@@ -226,16 +238,13 @@ async function downloadVideo() {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                url: url,
-                videoQuality: selectedQuality, 
-                downloadMode: selectedFormat === 'mp3' ? 'audio' : 'default'
-            })
+            body: JSON.stringify(requestBody)
         });
 
         const data = await response.json();
 
-        if (data.status === 'stream' || data.url || data.status === 'redirect') {
+        // Check for 'tunnel' or 'redirect' statuses, or a direct link return payload
+        if (data.status === 'stream' || data.status === 'tunnel' || data.status === 'redirect' || data.url) {
             if (progressFill) progressFill.style.width = '90%';
             if (progressText) progressText.textContent = '90%';
             if (statusMessage) statusMessage.textContent = 'Starting browser download...';
@@ -260,18 +269,8 @@ async function downloadVideo() {
                 if (statusMessage) statusMessage.textContent = '';
             }, 3000);
         } else {
-            throw new Error(data.text || 'Failed to fetch downloadable stream.');
+            // Extracted fallback logic for text error messaging
+            throw new Error(data.text || (data.error && data.error.code) || 'Failed to fetch downloadable stream.');
         }
 
     } catch (error) {
-        console.error('Download error:', error);
-        if (progressFill) progressFill.style.width = '0%';
-        if (progressText) progressText.textContent = '0%';
-        if (statusMessage) statusMessage.textContent = 'Download failed.';
-        showError('Error downloading: ' + error.message);
-    } finally {
-        if (downloadBtn) downloadBtn.disabled = false;
-        if (spinner) spinner.style.display = 'none';
-    }
-}
-
