@@ -1,6 +1,195 @@
-// Download video using Cobalt public API
+// Complete YouTube Downloader with Cobalt API Integration
+// This version bypasses the local backend and uses Cobalt for downloads
+
+let currentVideoData = null;
+let selectedQuality = '720'; // Match default quality strings for Cobalt API
+let selectedFormat = 'mp4';
+
+// Extract YouTube video ID from URL
+function extractVideoId(url) {
+    const patterns = [
+        /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/,
+        /youtube\.com\/embed\/([^&\n?#]+)/,
+        /youtube\.com\/v\/([^&\n?#]+)/
+    ];
+
+    for (let pattern of patterns) {
+        const match = url.match(pattern);
+        if (match) return match[1];
+    }
+    return null;
+}
+
+// Validate YouTube URL
+function isValidYouTubeUrl(url) {
+    return /^(https?:\/\/)?(www\.)?(youtube|youtu|youtube-nocookie)\.(com|be)\//.test(url);
+}
+
+// Show error message
+function showError(message) {
+    const errorDiv = document.getElementById('errorMessage');
+    if (errorDiv) {
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+        setTimeout(() => {
+            errorDiv.style.display = 'none';
+        }, 5000);
+    } else {
+        console.error(message);
+    }
+}
+
+// Show success notification
+function showNotification(message) {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        color: white;
+        padding: 15px 25px;
+        border-radius: 8px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        z-index: 1000;
+        animation: slideInRight 0.3s ease-out;
+        font-weight: bold;
+    `;
+    notification.textContent = '✓ ' + message;
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+        notification.remove();
+    }, 3000);
+}
+
+// Fetch video information
+async function fetchVideoInfo() {
+    const urlInput = document.getElementById('youtubeUrl');
+    if (!urlInput) return;
+    const url = urlInput.value.trim();
+
+    if (!url) {
+        showError('Please enter a YouTube URL');
+        return;
+    }
+
+    if (!isValidYouTubeUrl(url)) {
+        showError('Please enter a valid YouTube URL');
+        return;
+    }
+
+    const videoId = extractVideoId(url);
+    if (!videoId) {
+        showError('Could not extract video ID from URL');
+        return;
+    }
+
+    // Show loading state
+    const fetchBtn = document.getElementById('fetchBtn') || event.target;
+    const spinner = document.getElementById('fetchSpinner');
+    if (fetchBtn) fetchBtn.disabled = true;
+    if (spinner) spinner.style.display = 'inline-block';
+
+    try {
+        // Try to fetch from backend first
+        try {
+            const response = await fetch('http://localhost:3000/api/video-info', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                currentVideoData = data;
+                displayVideoInfo(data);
+                const section = document.getElementById('videoInfoSection');
+                if (section) section.style.display = 'block';
+                return;
+            }
+        } catch (backendError) {
+            console.log('Backend not available, using mock data');
+        }
+
+        // Fallback to mock data if backend is not available
+        currentVideoData = await getMockVideoInfo(videoId);
+        displayVideoInfo(currentVideoData);
+        const section = document.getElementById('videoInfoSection');
+        if (section) section.style.display = 'block';
+        showNotification('Using mock data for visual overview');
+
+    } catch (error) {
+        showError(`Error fetching video: ${error.message}`);
+    } finally {
+        if (fetchBtn) fetchBtn.disabled = false;
+        if (spinner) spinner.style.display = 'none';
+    }
+}
+
+// Display video information
+function displayVideoInfo(data) {
+    const thumb = document.getElementById('videoThumbnail');
+    const title = document.getElementById('videoTitle');
+    const channel = document.getElementById('videoChannel');
+    const duration = document.getElementById('videoDuration');
+    const views = document.getElementById('videoViews');
+    const uploadDate = document.getElementById('videoUploadDate');
+
+    if (thumb) thumb.src = data.thumbnail;
+    if (title) title.textContent = data.title;
+    if (channel) channel.textContent = `Channel: ${data.channel}`;
+    if (duration) duration.textContent = `Duration: ${data.duration}`;
+    if (views) views.textContent = `Views: ${data.views}`;
+    if (uploadDate) uploadDate.textContent = `Uploaded: ${data.uploadDate}`;
+}
+
+// Mock function to get video info
+async function getMockVideoInfo(videoId) {
+    return new Promise((resolve) => {
+        setTimeout(() => {
+            resolve({
+                id: videoId,
+                title: 'Sample YouTube Video',
+                channel: 'Sample Channel',
+                duration: '10:45',
+                views: '1.2M',
+                uploadDate: '2 weeks ago',
+                thumbnail: `https://youtube.com{videoId}/maxresdefault.jpg`,
+                formats: [
+                    { quality: '1080p', format: 'mp4' },
+                    { quality: '720p', format: 'mp4' },
+                    { quality: '480p', format: 'mp4' },
+                    { quality: '360p', format: 'mp4' },
+                    { quality: 'audio', format: 'mp3' }
+                ]
+            });
+        }, 1000);
+    });
+}
+
+// Select quality
+function selectQuality(quality) {
+    selectedQuality = quality.replace('p', ''); 
+    document.querySelectorAll('.quality-btn').forEach(btn => {
+        btn.classList.remove('selected');
+    });
+    if (event && event.target) {
+        event.target.classList.add('selected');
+    }
+}
+
+// Update format
+function updateFormat(format) {
+    selectedFormat = format;
+}
+
+// Download video using Cobalt API
 async function downloadVideo() {
-    const url = document.getElementById('youtubeUrl').value.trim();
+    const urlInput = document.getElementById('youtubeUrl');
+    if (!urlInput) return;
+    const url = urlInput.value.trim();
+    
     if (!url) {
         showError('Please enter a valid YouTube URL first!');
         return;
@@ -13,7 +202,7 @@ async function downloadVideo() {
     const progressText = document.getElementById('progressText');
     const statusMessage = document.getElementById('statusMessage');
 
-    downloadBtn.disabled = true;
+    if (downloadBtn) downloadBtn.disabled = true;
     if (spinner) spinner.style.display = 'inline-block';
     if (progressSection) progressSection.style.display = 'block';
     
@@ -21,26 +210,13 @@ async function downloadVideo() {
     if (progressText) progressText.textContent = '20%';
     if (statusMessage) statusMessage.textContent = 'Connecting to download server...';
 
-    // FIX: Use Cobalt's official processing endpoint API
-    const apiUrl = `https://cobalt.tools`; 
+    // Correct API Base URL pointing to Cobalt's JSON processing path
+    const apiUrl = `https://api.cobalt.tools/api/json`; 
 
     try {
         if (progressFill) progressFill.style.width = '50%';
         if (progressText) progressText.textContent = '50%';
         if (statusMessage) statusMessage.textContent = 'Fetching download links...';
-
-        // FIX: Reconfigured request body parameters to align with Cobalt API requirements
-        const requestBody = {
-            url: url,
-            vQuality: selectedQuality, 
-            isAudioOnly: selectedFormat === 'mp3'
-        };
-
-        // If WebM is chosen specifically, configure codec settings if needed, 
-        // or let Cobalt handle the default container.
-        if (selectedFormat === 'webm') {
-            requestBody.vCodec = 'VP9';
-        }
 
         const response = await fetch(apiUrl, {
             method: 'POST',
@@ -48,23 +224,20 @@ async function downloadVideo() {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(requestBody)
+            body: JSON.stringify({
+                url: url,
+                videoQuality: selectedQuality, 
+                downloadMode: selectedFormat === 'mp3' ? 'audio' : 'default'
+            })
         });
-
-        if (!response.ok) {
-            const errData = await response.json().catch(() => ({}));
-            throw new Error(errData.text || `Server responded with status ${response.status}`);
-        }
 
         const data = await response.json();
 
-        // Cobalt returns 'redirect', 'stream', or 'tunnel' with a URL parameter
-        if (data.url) {
+        if (data.status === 'stream' || data.url || data.status === 'redirect') {
             if (progressFill) progressFill.style.width = '90%';
             if (progressText) progressText.textContent = '90%';
             if (statusMessage) statusMessage.textContent = 'Starting browser download...';
 
-            // Direct the browser to seamlessly trigger the file download
             const downloadUrl = data.url;
             const a = document.createElement('a');
             a.href = downloadUrl;
@@ -95,7 +268,19 @@ async function downloadVideo() {
         if (statusMessage) statusMessage.textContent = 'Download failed.';
         showError('Error downloading: ' + error.message);
     } finally {
-        downloadBtn.disabled = false;
+        if (downloadBtn) downloadBtn.disabled = false;
         if (spinner) spinner.style.display = 'none';
     }
 }
+
+// Allow Enter key to fetch video
+document.addEventListener('DOMContentLoaded', () => {
+    const urlInput = document.getElementById('youtubeUrl');
+    if (urlInput) {
+        urlInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                fetchVideoInfo();
+            }
+        });
+    }
+    
