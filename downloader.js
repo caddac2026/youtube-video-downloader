@@ -1,8 +1,8 @@
-// Complete YouTube Downloader with Backend Integration
-// This version works with a Node.js/Express backend using yt-dlp
+// Complete YouTube Downloader with Cobalt API Integration
+// This version bypasses the local backend and uses Cobalt for downloads
 
 let currentVideoData = null;
-let selectedQuality = 'best';
+let selectedQuality = '720'; // Match default quality strings for Cobalt API
 let selectedFormat = 'mp4';
 
 // Extract YouTube video ID from URL
@@ -109,7 +109,7 @@ async function fetchVideoInfo() {
         currentVideoData = await getMockVideoInfo(videoId);
         displayVideoInfo(currentVideoData);
         document.getElementById('videoInfoSection').style.display = 'block';
-        showNotification('Using mock data (backend not running)');
+        showNotification('Using mock data for visual overview');
 
     } catch (error) {
         showError(`Error fetching video: ${error.message}`);
@@ -140,7 +140,7 @@ async function getMockVideoInfo(videoId) {
                 duration: '10:45',
                 views: '1.2M',
                 uploadDate: '2 weeks ago',
-                thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+                thumbnail: `https://youtube.com{videoId}/maxresdefault.jpg`,
                 formats: [
                     { quality: '1080p', format: 'mp4' },
                     { quality: '720p', format: 'mp4' },
@@ -155,7 +155,8 @@ async function getMockVideoInfo(videoId) {
 
 // Select quality
 function selectQuality(quality) {
-    selectedQuality = quality;
+    // Map standard selections to what Cobalt expects if needed (e.g., '1080p' -> '1080')
+    selectedQuality = quality.replace('p', ''); 
     document.querySelectorAll('.quality-btn').forEach(btn => {
         btn.classList.remove('selected');
     });
@@ -167,14 +168,14 @@ function updateFormat(format) {
     selectedFormat = format;
 }
 
-// Download video
+// Download video using Cobalt public API
 async function downloadVideo() {
-    if (!currentVideoData) {
-        showError('Please fetch video info first');
+    const url = document.getElementById('youtubeUrl').value.trim();
+    if (!url) {
+        showError('Please enter a valid YouTube URL first!');
         return;
     }
 
-    const url = document.getElementById('youtubeUrl').value.trim();
     const downloadBtn = document.getElementById('downloadBtn');
     const spinner = document.getElementById('downloadSpinner');
     const progressSection = document.getElementById('progressSection');
@@ -183,99 +184,74 @@ async function downloadVideo() {
     const statusMessage = document.getElementById('statusMessage');
 
     downloadBtn.disabled = true;
-    spinner.style.display = 'inline-block';
-    progressSection.style.display = 'block';
-    statusMessage.textContent = 'Starting download...';
+    if (spinner) spinner.style.display = 'inline-block';
+    if (progressSection) progressSection.style.display = 'block';
+    
+    if (progressFill) progressFill.style.width = '20%';
+    if (progressText) progressText.textContent = '20%';
+    if (statusMessage) statusMessage.textContent = 'Connecting to download server...';
+
+    const apiUrl = `https://cobalt.tools`; 
 
     try {
-        // Try backend first
-        try {
-            const response = await fetch('http://localhost:3000/api/download', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    url: url,
-                    quality: selectedQuality,
-                    format: selectedFormat
-                })
-            });
+        if (progressFill) progressFill.style.width = '50%';
+        if (progressText) progressText.textContent = '50%';
+        if (statusMessage) statusMessage.textContent = 'Fetching download links...';
 
-            if (response.ok) {
-                const blob = await response.blob();
-                const filename = `${currentVideoData.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${selectedFormat}`;
-                
-                // Create download link
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = filename;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(link.href);
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                url: url,
+                videoQuality: selectedQuality, 
+                downloadMode: selectedFormat === 'mp3' ? 'audio' : 'default'
+            })
+        });
 
-                progressFill.style.width = '100%';
-                progressText.textContent = '100%';
-                statusMessage.textContent = '✓ Download complete!';
-                showNotification(`Successfully downloaded: ${currentVideoData.title}`);
+        const data = await response.json();
 
-                setTimeout(() => {
-                    progressSection.style.display = 'none';
-                    progressFill.style.width = '0%';
-                    progressText.textContent = '0%';
-                    statusMessage.textContent = '';
-                }, 2000);
-                return;
-            }
-        } catch (backendError) {
-            console.log('Backend error, using simulation:', backendError);
+        if (data.status === 'stream' || data.url) {
+            if (progressFill) progressFill.style.width = '90%';
+            if (progressText) progressText.textContent = '90%';
+            if (statusMessage) statusMessage.textContent = 'Starting browser download...';
+
+            // Direct the browser to seamlessly trigger the file download
+            const downloadUrl = data.url;
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = ''; 
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+
+            if (progressFill) progressFill.style.width = '100%';
+            if (progressText) progressText.textContent = '100%';
+            if (statusMessage) statusMessage.textContent = '✓ Download Started!';
+            showNotification('Download triggered successfully!');
+
+            setTimeout(() => {
+                if (progressSection) progressSection.style.display = 'none';
+                if (progressFill) progressFill.style.width = '0%';
+                if (progressText) progressText.textContent = '0%';
+                if (statusMessage) statusMessage.textContent = '';
+            }, 3000);
+        } else {
+            throw new Error(data.text || 'Failed to fetch downloadable stream.');
         }
-
-        // Fallback to simulation
-        simulateDownload();
 
     } catch (error) {
-        showError(`Download failed: ${error.message}`);
-        statusMessage.textContent = 'Download failed. Please try again.';
+        console.error('Download error:', error);
+        if (progressFill) progressFill.style.width = '0%';
+        if (progressText) progressText.textContent = '0%';
+        if (statusMessage) statusMessage.textContent = 'Download failed.';
+        showError('Error downloading: ' + error.message);
     } finally {
         downloadBtn.disabled = false;
-        spinner.style.display = 'none';
+        if (spinner) spinner.style.display = 'none';
     }
-}
-
-// Simulate download progress
-async function simulateDownload() {
-    const progressFill = document.getElementById('progressFill');
-    const progressText = document.getElementById('progressText');
-    const statusMessage = document.getElementById('statusMessage');
-
-    for (let i = 0; i <= 100; i += Math.random() * 15) {
-        const progress = Math.min(i, 100);
-        progressFill.style.width = progress + '%';
-        progressText.textContent = Math.floor(progress) + '%';
-
-        if (progress < 30) {
-            statusMessage.textContent = 'Fetching video information...';
-        } else if (progress < 60) {
-            statusMessage.textContent = 'Downloading video...';
-        } else if (progress < 90) {
-            statusMessage.textContent = 'Converting format...';
-        } else {
-            statusMessage.textContent = 'Finalizing...';
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 300));
-    }
-
-    progressText.textContent = '100%';
-    statusMessage.textContent = '✓ Download simulation complete (Backend not running)';
-    showNotification('Install backend to enable real downloads');
-
-    setTimeout(() => {
-        document.getElementById('progressSection').style.display = 'none';
-        progressFill.style.width = '0%';
-        progressText.textContent = '0%';
-        statusMessage.textContent = '';
-    }, 2000);
 }
 
 // Allow Enter key to fetch video
@@ -306,8 +282,4 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-console.log('YouTube Downloader Ready');
-console.log('To enable real downloads, start the backend server:');
-console.log('1. npm install yt-dlp express cors');
-console.log('2. node server.js');
-console.log('Server will run on http://localhost:3000');
+console.log('YouTube Downloader Ready (Cobalt API Integration)');
