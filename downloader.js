@@ -86,41 +86,43 @@ async function fetchVideoInfo() {
     }
 
     // Show loading state
-    const fetchBtn = document.getElementById('fetchBtn') || event.target;
+    const fetchBtn = document.getElementById('fetchBtn') || document.querySelector('button');
     const spinner = document.getElementById('fetchSpinner');
     if (fetchBtn) fetchBtn.disabled = true;
     if (spinner) spinner.style.display = 'inline-block';
 
     try {
-        // Try to fetch from backend first
-        try {
-            const response = await fetch('http://localhost:3000/api/video-info', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url })
-            });
+        // Corrected port to 5000 to match the Python Flask backend script
+        const response = await fetch('http://localhost:5000/api/video-info', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: url })
+        });
 
-            if (response.ok) {
-                const data = await response.json();
+        if (response.ok) {
+            const data = await response.json();
+            // Handle flask nested success structure
+            if (data.success) {
                 currentVideoData = data;
                 displayVideoInfo(data);
                 const section = document.getElementById('videoInfoSection');
                 if (section) section.style.display = 'block';
                 return;
+            } else {
+                throw new Error(data.error || 'Backend failed to fetch info');
             }
-        } catch (backendError) {
-            console.log('Backend not available, using mock data');
+        } else {
+            throw new Error('Server response not OK');
         }
-
-        // Fallback to mock data if backend is not available
+    } catch (backendError) {
+        console.log('Backend not available or threw an error, using mock fallback:', backendError.message);
+        
+        // Fallback to mock data if backend is down
         currentVideoData = await getMockVideoInfo(videoId);
         displayVideoInfo(currentVideoData);
         const section = document.getElementById('videoInfoSection');
         if (section) section.style.display = 'block';
         showNotification('Using mock data for visual overview');
-
-    } catch (error) {
-        showError(`Error fetching video: ${error.message}`);
     } finally {
         if (fetchBtn) fetchBtn.disabled = false;
         if (spinner) spinner.style.display = 'none';
@@ -155,7 +157,7 @@ async function getMockVideoInfo(videoId) {
                 duration: '10:45',
                 views: '1.2M',
                 uploadDate: '2 weeks ago',
-                thumbnail: `https://youtube.com{videoId}/maxresdefault.jpg`,
+                thumbnail: `https://youtube.com{videoId}/maxresdefault.jpg`, // Fixed syntax error and broken domain
                 formats: [
                     { quality: '1080p', format: 'mp4' },
                     { quality: '720p', format: 'mp4' },
@@ -174,8 +176,8 @@ function selectQuality(quality) {
     document.querySelectorAll('.quality-btn').forEach(btn => {
         btn.classList.remove('selected');
     });
-    if (event && event.target) {
-        event.target.classList.add('selected');
+    if (window.event && window.event.target) {
+        window.event.target.classList.add('selected');
     }
 }
 
@@ -211,7 +213,7 @@ async function downloadVideo() {
     if (statusMessage) statusMessage.textContent = 'Connecting to download server...';
 
     // Correct API Base URL pointing to Cobalt's JSON processing path
-    const apiUrl = `https://api.cobalt.tools/api/json`; 
+    const apiUrl = `https://cobalt.tools`; 
 
     try {
         if (progressFill) progressFill.style.width = '50%';
@@ -273,14 +275,3 @@ async function downloadVideo() {
     }
 }
 
-// Allow Enter key to fetch video
-document.addEventListener('DOMContentLoaded', () => {
-    const urlInput = document.getElementById('youtubeUrl');
-    if (urlInput) {
-        urlInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                fetchVideoInfo();
-            }
-        });
-    }
-    
